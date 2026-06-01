@@ -559,7 +559,7 @@ function renderGame(state) {
     if (currentPlayer === myIndex) {
       bidPanel.style.display = 'block';
       const isDealer = players[myIndex].isDealer;
-      const soFar = bids.filter(b => b !== null).reduce((a, b) => a + b, 0);
+      const soFar = (bids || []).filter(b => b !== null).reduce((a, b) => a + b, 0);
       const forb = isDealer ? cardsThisRound - soFar : -1;
       document.getElementById('bidHint').textContent = isDealer
         ? `You're the dealer — you cannot bid ${forb >= 0 ? forb : '—'}.`
