@@ -10,6 +10,12 @@ const io = new Server(server, { cors: { origin: '*' } });
 
 const ROOT = process.cwd();
 app.use(express.static(ROOT));
+const fs = require('fs');
+app.get('/debug', (req, res) => {
+  const files = fs.readdirSync(process.cwd());
+  res.json({ cwd: process.cwd(), files });
+});
+
 app.get('*', (req, res) => res.sendFile(path.join(ROOT, 'index.html')));
 
 // ── GAME STATE STORE ──────────────────────────────────────────────────────────
