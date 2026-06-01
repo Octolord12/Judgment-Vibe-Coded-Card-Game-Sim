@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Judgment — Online Card Game</title>
+<script src="/socket.io/socket.io.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --purple: #534AB7; --purple-lt: #EEEDFE; --purple-md: #AFA9EC; --purple-dk: #3C3489;
+    --teal: #1D9E75; --teal-lt: #E1F5EE; --teal-md: #5DCAA5; --teal-dk: #085041;
+    --coral: #D85A30; --coral-lt: #FAECE7;
+    --red: #E24B4A; --red-lt: #FCEBEB; --red-dk: #791F1F;
+    --amber-lt: #FAEEDA; --amber-dk: #633806;
+    --bg: #f8f7f4; --surface: #ffffff; --border: rgba(0,0,0,0.1);
+    --text: #1a1a1a; --text2: #666; --text3: #999;
+    --radius: 10px; --radius-lg: 14px;
+  }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+  .screen { display: none; }
+  .screen.active { display: block; }
+
+  /* ── NAV BAR ── */
+  .topbar { background: var(--purple); color: #fff; padding: .6rem 1rem; display: flex; align-items: center; justify-content: space-between; }
+  .topbar-title { font-size: 16px; font-weight: 600; letter-spacing: -.3px; }
+  .topbar-room { font-size: 12px; opacity: .8; }
+
+  /* ── LANDING ── */
+  #landing { max-width: 480px; margin: 0 auto; padding: 2rem 1rem; text-align: center; }
+  .logo { width: 80px; height: 80px; border-radius: 50%; background: var(--purple-lt); border: 2px solid var(--purple-md); display: flex; align-items: center; justify-content: center; font-size: 36px; margin: 0 auto 1rem; }
+  h1 { font-size: 32px; font-weight: 700; letter-spacing: -1px; margin-bottom: .25rem; }
+  .sub { font-size: 14px; color: var(--text2); margin-bottom: 2rem; }
+  .card-box { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem; margin-bottom: 1rem; text-align: left; }
+  .card-box h3 { font-size: 14px; font-weight: 600; margin-bottom: .75rem; color: var(--text2); text-transform: uppercase; letter-spacing: .05em; font-size: 11px; }
+  input[type=text] { width: 100%; padding: 9px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; background: var(--bg); color: var(--text); outline: none; }
+  input[type=text]:focus { border-color: var(--purple-md); box-shadow: 0 0 0 3px var(--purple-lt); }
+  .seg { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+  .seg-btn { padding: 6px 14px; font-size: 13px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); cursor: pointer; transition: all .15s; }
+  .seg-btn:hover { border-color: var(--purple-md); }
+  .seg-btn.on { background: var(--purple); color: #fff; border-color: var(--purple); }
+  .field-row { display: flex; flex-direction: column; gap: 5px; margin-bottom: .75rem; }
+  .field-row:last-child { margin-bottom: 0; }
+  .field-label { font-size: 12px; color: var(--text2); }
+  .btn-primary { width: 100%; padding: 11px; font-size: 15px; font-weight: 600; background: var(--purple); color: #fff; border: none; border-radius: var(--radius); cursor: pointer; margin-top: .5rem; transition: background .15s; }
+  .btn-primary:hover { background: var(--purple-dk); }
+  .btn-secondary { width: 100%; padding: 11px; font-size: 15px; font-weight: 600; background: transparent; color: var(--purple); border: 2px solid var(--purple-md); border-radius: var(--radius); cursor: pointer; transition: all .15s; }
+  .btn-secondary:hover { background: var(--purple-lt); }
+  .divider { text-align: center; color: var(--text3); font-size: 13px; margin: .75rem 0; position: relative; }
+  .divider::before, .divider::after { content: ''; position: absolute; top: 50%; width: 42%; height: 1px; background: var(--border); }
+  .divider::before { left: 0; } .divider::after { right: 0; }
+  .suit-row { display: flex; gap: 12px; justify-content: center; margin-top: 1.5rem; }
+  .suit-pip { width: 46px; height: 46px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 22px; border: 1px solid var(--border); }
+  .pip-s { background: #f1f0eb; color: #1a1a1a; }
+  .pip-h { background: var(--red-lt); color: var(--red); }
+  .pip-d { background: var(--coral-lt); color: var(--coral); }
+  .pip-c { background: var(--purple-lt); color: var(--purple); }
+  .err-msg { font-size: 13px; color: var(--red); background: var(--red-lt); border: 1px solid #F7C1C1; border-radius: 8px; padding: 8px 12px; margin-top: .5rem; display: none; }
+  .err-msg.show { display: block; }
+
+  /* ── LOBBY ── */
+  #lobby { max-width: 480px; margin: 0 auto; padding: 1.5rem 1rem; }
+  .lobby-room { display: flex; align-items: center; justify-content: space-between; background: var(--purple-lt); border: 1px solid var(--purple-md); border-radius: var(--radius-lg); padding: .75rem 1rem; margin-bottom: 1rem; }
+  .lobby-room-id { font-size: 22px; font-weight: 700; letter-spacing: 2px; color: var(--purple-dk); }
+  .copy-btn { padding: 5px 12px; font-size: 12px; font-weight: 600; background: var(--purple); color: #fff; border: none; border-radius: 6px; cursor: pointer; }
+  .copy-btn:hover { background: var(--purple-dk); }
+  .share-hint { font-size: 12px; color: var(--purple-dk); opacity: .8; }
+  .player-list { display: flex; flex-direction: column; gap: 7px; }
+  .p-item { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: var(--radius); background: var(--bg); border: 1px solid var(--border); }
+  .p-avatar { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; flex-shrink: 0; }
+  .p-name { font-size: 14px; font-weight: 500; flex: 1; }
+  .p-badge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px; }
+  .badge-online { background: var(--teal-lt); color: var(--teal-dk); }
+  .badge-offline { background: #f1f0eb; color: var(--text3); }
+  .badge-cpu { background: var(--purple-lt); color: var(--purple-dk); }
+  .badge-host { background: var(--amber-lt); color: var(--amber-dk); }
+  .wait-msg { font-size: 13px; color: var(--text2); text-align: center; padding: .75rem; }
+
+  /* ── GAME ── */
+  #game { max-width: 700px; margin: 0 auto; padding: .75rem 1rem 2rem; }
+  .game-header { display: flex; justify-content: space-between; align-items: center; background: var(--purple); color: #fff; border-radius: var(--radius-lg); padding: .6rem 1rem; margin-bottom: .75rem; }
+  .game-header-left { font-size: 13px; font-weight: 500; opacity: .9; }
+  .trump-chip { display: flex; align-items: center; gap: 5px; font-size: 13px; font-weight: 600; padding: 3px 10px; border-radius: 20px; background: rgba(255,255,255,.15); }
+
+  /* Scoreboard */
+  .scoreboard { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: .75rem 1rem; margin-bottom: .6rem; overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { font-weight: 500; color: var(--text2); text-align: left; padding: 3px 8px 6px 0; border-bottom: 1px solid var(--border); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+  td { padding: 5px 8px 5px 0; color: var(--text); vertical-align: middle; }
+  .tc { text-align: center; } .tr { text-align: right; font-variant-numeric: tabular-nums; }
+  tr.cur td { background: var(--purple-lt); }
+  tr.cur td:first-child { border-radius: 6px 0 0 6px; }
+  tr.cur td:last-child { border-radius: 0 6px 6px 0; }
+  .av-sm { width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; margin-right: 6px; vertical-align: middle; }
+  .bid-chip { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+  .bid-set { background: var(--teal-lt); color: var(--teal-dk); }
+  .bid-wait { background: var(--amber-lt); color: var(--amber-dk); font-style: italic; }
+  .won-num { color: var(--text2); }
+
+  /* Status */
+  .status { font-size: 13px; color: var(--text2); margin-bottom: .5rem; padding: 0 .1rem; }
+  .status strong { color: var(--text); }
+
+  /* Bid panel */
+  .bid-panel { border: 2px solid var(--purple-md); background: var(--purple-lt); border-radius: var(--radius-lg); padding: 1rem 1.25rem; margin-bottom: .75rem; }
+  .bid-panel h3 { font-size: 14px; font-weight: 600; color: var(--purple-dk); margin-bottom: .2rem; }
+  .bid-panel p { font-size: 12px; color: var(--purple-dk); margin-bottom: .6rem; opacity: .85; }
+  .bid-btns { display: flex; flex-wrap: wrap; gap: 6px; }
+  .bid-btn { width: 40px; height: 40px; border-radius: 8px; border: 1px solid var(--purple-md); background: #fff; color: var(--purple-dk); font-size: 15px; font-weight: 600; cursor: pointer; transition: all .1s; }
+  .bid-btn:hover { background: var(--purple); color: #fff; }
+  .bid-btn.forb { opacity: .25; cursor: not-allowed; }
+  .bid-btn.forb:hover { background: #fff; color: var(--purple-dk); }
+
+  /* Felt table */
+  .felt { background: var(--teal-lt); border: 1px solid var(--teal-md); border-radius: var(--radius-lg); padding: 1rem; margin-bottom: .75rem; min-height: 105px; }
+  .felt-lbl { font-size: 10px; font-weight: 700; color: var(--teal-dk); letter-spacing: .08em; text-transform: uppercase; margin-bottom: 8px; }
+  .played-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-start; }
+  .pslot { text-align: center; }
+  .pslot-name { font-size: 10px; font-weight: 600; color: var(--teal-dk); margin-bottom: 3px; }
+
+  /* Playing cards */
+  .card { display: inline-flex; flex-direction: column; justify-content: space-between; width: 52px; height: 74px; border: 1px solid #ddd; border-radius: 7px; padding: 4px 5px; background: #fff; font-size: 13px; font-weight: 600; cursor: default; user-select: none; transition: transform .12s, border-color .12s; }
+  .card.playable { cursor: pointer; border-color: var(--purple-md); }
+  .card.playable:hover { transform: translateY(-7px); border-color: var(--purple); border-width: 1.5px; }
+  .card.dim { opacity: .28; cursor: not-allowed; }
+  .card .rk { font-size: 13px; line-height: 1; }
+  .card .su { font-size: 16px; line-height: 1; align-self: flex-end; }
+  .card.red { color: var(--red); }
+  .card.blk { color: var(--text); }
+  .card.trump-c { background: #E6F1FB; border-color: #B5D4F4; }
+
+  /* Hand */
+  .hand-zone { margin-bottom: .75rem; }
+  .hand-lbl { font-size: 10px; font-weight: 700; color: var(--text2); letter-spacing: .08em; text-transform: uppercase; margin-bottom: 7px; }
+  .hand { display: flex; flex-wrap: wrap; gap: 6px; }
+
+  /* Not-your-turn overlay */
+  .wait-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1rem; margin-bottom: .75rem; display: flex; align-items: center; gap: 10px; }
+  .wait-spinner { width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--purple); border-radius: 50%; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Round summary */
+  .rsum { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1rem 1.25rem; margin-bottom: .75rem; }
+  .rsum h3 { font-size: 15px; font-weight: 600; margin-bottom: .75rem; }
+  .rsum-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .rsum-row:last-of-type { border: none; }
+  .pts-chip { font-size: 12px; font-weight: 600; padding: 2px 10px; border-radius: 10px; }
+  .pts-good { background: var(--teal-lt); color: var(--teal-dk); }
+  .pts-bad { background: var(--red-lt); color: var(--red-dk); }
+  .btn-act { padding: 9px 22px; font-size: 14px; font-weight: 600; background: var(--purple); color: #fff; border: none; border-radius: var(--radius); cursor: pointer; margin-top: .75rem; }
+  .btn-act:hover { background: var(--purple-dk); }
+  .host-only { font-size: 12px; color: var(--text3); margin-left: .5rem; }
+
+  /* Chat */
+  .chat-box { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: .75rem; margin-bottom: .75rem; }
+  .chat-msgs { max-height: 100px; overflow-y: auto; font-size: 12px; color: var(--text2); margin-bottom: .5rem; display: flex; flex-direction: column; gap: 2px; }
+  .chat-msg strong { color: var(--text); }
+  .chat-input-row { display: flex; gap: 6px; }
+  .chat-input-row input { flex: 1; font-size: 13px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 7px; outline: none; background: var(--bg); }
+  .chat-input-row input:focus { border-color: var(--purple-md); }
+  .chat-send { padding: 6px 14px; font-size: 13px; background: var(--purple); color: #fff; border: none; border-radius: 7px; cursor: pointer; }
+
+  /* Gameover */
+  #gameover { max-width: 420px; margin: 2rem auto; padding: 1rem; text-align: center; }
+  .trophy { font-size: 52px; margin-bottom: .5rem; }
+  .go-title { font-size: 24px; font-weight: 700; letter-spacing: -.5px; }
+  .go-sub { font-size: 14px; color: var(--text2); margin-bottom: 1rem; }
+  .final-list { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1rem; text-align: left; }
+  .f-row { display: flex; align-items: center; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+  .f-row:last-child { border: none; }
+  .f-row.first { font-weight: 600; }
+  .rank-badge { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; margin-right: 8px; flex-shrink: 0; }
+  .rk1 { background: var(--amber-lt); color: var(--amber-dk); }
+  .rk2 { background: #f1f0eb; color: var(--text2); }
+  .rkn { background: #f1f0eb; color: var(--text3); }
+
+  /* Responsive */
+  @media (max-width: 480px) {
+    .card { width: 44px; height: 64px; font-size: 12px; }
+    .card .su { font-size: 14px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- TOPBAR (hidden on landing) -->
+<div class="topbar" id="topbar" style="display:none;">
+  <div class="topbar-title">♠ Judgment</div>
+  <div class="topbar-room" id="topbarRoom"></div>
+</div>
+
+<!-- LANDING -->
+<div id="landing" class="screen active">
+  <div style="max-width:480px;margin:0 auto;padding:2rem 1rem;text-align:center;">
+    <div class="logo">♠</div>
+    <h1>Judgment</h1>
+    <p class="sub">Online trick-bidding card game — share a link, play together</p>
+
+    <div class="card-box">
+      <h3>Create a game</h3>
+      <div class="field-row">
+        <label class="field-label">Your name</label>
+        <input type="text" id="createName" placeholder="Enter your name" maxlength="14">
+      </div>
+      <div class="field-row">
+        <label class="field-label">CPU opponents (optional)</label>
+        <div class="seg" id="cpuSeg">
+          <button class="seg-btn on" data-n="0">0</button>
+          <button class="seg-btn" data-n="1">1</button>
+          <button class="seg-btn" data-n="2">2</button>
+          <button class="seg-btn" data-n="3">3</button>
+        </div>
+      </div>
+      <div class="field-row">
+        <label class="field-label">CPU difficulty</label>
+        <div class="seg" id="diffSeg">
+          <button class="seg-btn" data-d="easy">Easy</button>
+          <button class="seg-btn on" data-d="medium">Medium</button>
+          <button class="seg-btn" data-d="hard">Hard</button>
+        </div>
+      </div>
+      <button class="btn-primary" id="createBtn">Create game room</button>
+      <div class="err-msg" id="createErr"></div>
+    </div>
+
+    <div class="divider">or</div>
+
+    <div class="card-box">
+      <h3>Join a game</h3>
+      <div class="field-row">
+        <label class="field-label">Your name</label>
+        <input type="text" id="joinName" placeholder="Enter your name" maxlength="14">
+      </div>
+      <div class="field-row">
+        <label class="field-label">Room code</label>
+        <input type="text" id="joinCode" placeholder="6-letter code" maxlength="6" style="text-transform:uppercase;letter-spacing:2px;font-size:16px;font-weight:600;">
+      </div>
+      <button class="btn-secondary" id="joinBtn">Join room</button>
+      <div class="err-msg" id="joinErr"></div>
+    </div>
+
+    <div class="suit-row">
+      <div class="suit-pip pip-s">♠</div>
+      <div class="suit-pip pip-h">♥</div>
+      <div class="suit-pip pip-d">♦</div>
+      <div class="suit-pip pip-c">♣</div>
+    </div>
+  </div>
+</div>
+
+<!-- LOBBY -->
+<div id="lobby" class="screen">
+  <div style="max-width:480px;margin:0 auto;padding:1.5rem 1rem;">
+    <div class="lobby-room">
+      <div>
+        <div style="font-size:11px;font-weight:600;color:var(--purple-dk);margin-bottom:2px;text-transform:uppercase;letter-spacing:.05em;">Room code</div>
+        <div class="lobby-room-id" id="lobbyRoomId">——</div>
+        <div class="share-hint">Share this code with friends</div>
+      </div>
+      <button class="copy-btn" id="copyLinkBtn">Copy link</button>
+    </div>
+
+    <div class="card-box" style="margin-bottom:.75rem;">
+      <h3 style="font-size:11px;color:var(--text2);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:.75rem;">Players</h3>
+      <div class="player-list" id="lobbyPlayers"></div>
+    </div>
+
+    <div id="hostControls" style="display:none;">
+      <button class="btn-primary" id="startGameBtn">Start game</button>
+      <div style="font-size:12px;color:var(--text2);text-align:center;margin-top:.4rem;">You're the host — start when everyone has joined</div>
+    </div>
+    <div id="waitControls">
+      <div class="wait-msg">⏳ Waiting for host to start the game...</div>
+    </div>
+  </div>
+</div>
+
+<!-- GAME -->
+<div id="game" class="screen">
+  <div class="game-header">
+    <div class="game-header-left">Round <span id="rNum">1</span>/<span id="rTotal">1</span> &bull; <span id="cardsN">1</span> cards</div>
+    <div class="trump-chip" id="trumpChip">♠ trump</div>
+  </div>
+
+  <div class="scoreboard">
+    <table>
+      <thead><tr><th>Player</th><th class="tc">Bid</th><th class="tc">Won</th><th class="tr">Score</th></tr></thead>
+      <tbody id="scoreBody"></tbody>
+    </table>
+  </div>
+
+  <div class="status" id="statusRow"></div>
+
+  <div id="bidPanel" style="display:none;" class="bid-panel">
+    <h3>Your bid</h3>
+    <p id="bidHint"></p>
+    <div class="bid-btns" id="bidBtns"></div>
+  </div>
+
+  <div id="waitPanel" style="display:none;" class="wait-panel">
+    <div class="wait-spinner"></div>
+    <span id="waitMsg" style="font-size:14px;color:var(--text2);"></span>
+  </div>
+
+  <div class="felt">
+    <div class="felt-lbl">Table</div>
+    <div class="played-row" id="playedCards"></div>
+  </div>
+
+  <div class="hand-zone" id="handZone" style="display:none;">
+    <div class="hand-lbl" id="handLbl">Your hand</div>
+    <div class="hand" id="handDiv"></div>
+  </div>
+
+  <div id="rsumPanel" style="display:none;" class="rsum">
+    <h3>Round <span id="rsNum"></span> results</h3>
+    <div id="rsRows"></div>
+    <div style="display:flex;align-items:center;">
+      <button class="btn-act" id="nextRoundBtn" style="display:none;">Next round</button>
+      <span class="host-only" id="nextRoundHint" style="display:none;"></span>
+    </div>
+  </div>
+
+  <div class="chat-box">
+    <div class="chat-msgs" id="chatMsgs"></div>
+    <div class="chat-input-row">
+      <input type="text" id="chatInput" placeholder="Say something..." maxlength="80">
+      <button class="chat-send" id="chatSend">Send</button>
+    </div>
+  </div>
+</div>
+
+<!-- GAMEOVER -->
+<div id="gameover" class="screen">
+  <div class="trophy">♛</div>
+  <div class="go-title">Game over!</div>
+  <div class="go-sub" id="goSub"></div>
+  <div class="final-list" id="finalList"></div>
+  <button class="btn-primary" style="margin-top:1rem;" id="playAgainBtn">Back to lobby</button>
+</div>
+
+<script>
+const AVATAR_COLORS = [
+  {bg:'#EEEDFE',fg:'#3C3489'},{bg:'#E1F5EE',fg:'#085041'},
+  {bg:'#FAECE7',fg:'#712B13'},{bg:'#FAEEDA',fg:'#633806'},
+  {bg:'#FBEAF0',fg:'#72243E'},{bg:'#EAF3DE',fg:'#27500A'}
+];
+function initials(name){return name.trim().split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);}
+function av(name,idx,size=32){
+  const c=AVATAR_COLORS[idx%AVATAR_COLORS.length];
+  return `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${c.bg};color:${c.fg};display:inline-flex;align-items:center;justify-content:center;font-size:${Math.round(size*.35)}px;font-weight:700;">${initials(name)}</div>`;
+}
+
+// ── STATE ─────────────────────────────────────────────────────────────────────
+let myIdx = null;
+let myRoomId = null;
+let isHost = false;
+let myName = '';
+let currentState = null;
+
+// ── SOCKET ────────────────────────────────────────────────────────────────────
+const socket = io();
+
+socket.on('connect', () => {
+  // Try to rejoin if we have saved session
+  const saved = sessionStorage.getItem('jdg_session');
+  if (saved) {
+    try {
+      const {roomId, playerIdx} = JSON.parse(saved);
+      socket.emit('rejoin', {roomId, playerIdx});
+    } catch(e) { sessionStorage.removeItem('jdg_session'); }
+  }
+});
+
+socket.on('roomCreated', ({roomId, playerIdx}) => {
+  myRoomId = roomId; myIdx = playerIdx; isHost = true;
+  sessionStorage.setItem('jdg_session', JSON.stringify({roomId, playerIdx}));
+});
+
+socket.on('roomJoined', ({roomId, playerIdx}) => {
+  myRoomId = roomId; myIdx = playerIdx; isHost = false;
+  sessionStorage.setItem('jdg_session', JSON.stringify({roomId, playerIdx}));
+});
+
+socket.on('lobby', (data) => {
+  showScreen('lobby');
+  renderLobby(data);
+});
+
+socket.on('state', (state) => {
+  currentState = state;
+  if (state.phase === 'gameover') { renderGameover(state); showScreen('gameover'); }
+  else if (state.phase === 'roundover') { showScreen('game'); renderGame(state); }
+  else { showScreen('game'); renderGame(state); }
+});
+
+socket.on('chat', ({name, text}) => {
+  const msgs = document.getElementById('chatMsgs');
+  const div = document.createElement('div');
+  div.className = 'chat-msg';
+  div.innerHTML = `<strong>${name}:</strong> ${escHtml(text)}`;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+});
+
+socket.on('error', (msg) => alert(msg));
+
+// ── SCREEN HELPERS ────────────────────────────────────────────────────────────
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  document.getElementById('topbar').style.display = id === 'landing' ? 'none' : 'flex';
+  document.getElementById('topbarRoom').textContent = myRoomId ? `Room: ${myRoomId}` : '';
+}
+function escHtml(t){return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+// ── LANDING ───────────────────────────────────────────────────────────────────
+document.querySelectorAll('#cpuSeg .seg-btn').forEach(b => b.onclick = () => {
+  document.querySelectorAll('#cpuSeg .seg-btn').forEach(x => x.classList.remove('on')); b.classList.add('on');
+});
+document.querySelectorAll('#diffSeg .seg-btn').forEach(b => b.onclick = () => {
+  document.querySelectorAll('#diffSeg .seg-btn').forEach(x => x.classList.remove('on')); b.classList.add('on');
+});
+
+// Pre-fill room code from URL
+const urlParams = new URLSearchParams(location.search);
+const urlRoom = urlParams.get('room');
+if (urlRoom) document.getElementById('joinCode').value = urlRoom.toUpperCase();
+
+document.getElementById('createBtn').onclick = () => {
+  const name = document.getElementById('createName').value.trim();
+  if (!name) { showErr('createErr', 'Please enter your name.'); return; }
+  myName = name;
+  const cpuCount = parseInt(document.querySelector('#cpuSeg .seg-btn.on').dataset.n);
+  const diff = document.querySelector('#diffSeg .seg-btn.on').dataset.d;
+  socket.emit('createRoom', {name, cpuCount, diff});
+};
+
+document.getElementById('joinBtn').onclick = () => {
+  const name = document.getElementById('joinName').value.trim();
+  const code = document.getElementById('joinCode').value.trim().toUpperCase();
+  if (!name) { showErr('joinErr', 'Please enter your name.'); return; }
+  if (code.length < 4) { showErr('joinErr', 'Please enter a valid room code.'); return; }
+  myName = name;
+  socket.emit('joinRoom', {roomId: code, name});
+};
+
+function showErr(id, msg) {
+  const el = document.getElementById(id);
+  el.textContent = msg; el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+// ── LOBBY ─────────────────────────────────────────────────────────────────────
+function renderLobby(data) {
+  document.getElementById('lobbyRoomId').textContent = data.roomId;
+  const pl = document.getElementById('lobbyPlayers');
+  pl.innerHTML = '';
+  data.players.forEach((p, i) => {
+    const c = AVATAR_COLORS[i % AVATAR_COLORS.length];
+    const badgeHtml = p.isCpu
+      ? `<span class="p-badge badge-cpu">CPU</span>`
+      : p.online
+        ? `<span class="p-badge badge-online">Online</span>`
+        : `<span class="p-badge badge-offline">Offline</span>`;
+    const hostBadge = i === 0 && !p.isCpu ? `<span class="p-badge badge-host" style="margin-left:4px;">Host</span>` : '';
+    const div = document.createElement('div'); div.className = 'p-item';
+    div.innerHTML = `<div class="p-avatar" style="background:${c.bg};color:${c.fg};">${initials(p.name)}</div><span class="p-name">${escHtml(p.name)}</span>${badgeHtml}${hostBadge}`;
+    pl.appendChild(div);
+  });
+  const hc = document.getElementById('hostControls');
+  const wc = document.getElementById('waitControls');
+  if (isHost) { hc.style.display = 'block'; wc.style.display = 'none'; }
+  else { hc.style.display = 'none'; wc.style.display = 'block'; }
+}
+
+document.getElementById('copyLinkBtn').onclick = () => {
+  const url = `${location.origin}?room=${myRoomId}`;
+  navigator.clipboard.writeText(url).then(() => {
+    document.getElementById('copyLinkBtn').textContent = 'Copied!';
+    setTimeout(() => document.getElementById('copyLinkBtn').textContent = 'Copy link', 2000);
+  });
+};
+
+document.getElementById('startGameBtn').onclick = () => {
+  socket.emit('startGame', {roomId: myRoomId});
+};
+
+// ── GAME ──────────────────────────────────────────────────────────────────────
+const RV = {2:2,3:3,4:4,5:5,6:6,7:7,8:8,9:9,10:10,J:11,Q:12,K:13,A:14};
+
+function renderGame(state) {
+  const {players, roundIdx, totalRounds, cardsThisRound, trump, bids, myIndex,
+         myHand, trickPlayed, led, currentPlayer, phase, roundResults} = state;
+
+  document.getElementById('rNum').textContent = roundIdx + 1;
+  document.getElementById('rTotal').textContent = totalRounds;
+  document.getElementById('cardsN').textContent = cardsThisRound;
+  const tc = document.getElementById('trumpChip');
+  tc.textContent = trump + ' trump';
+  tc.style.color = (trump === '♥' || trump === '♦') ? '#ffb3b3' : '#fff';
+
+  // Scoreboard
+  const sb = document.getElementById('scoreBody'); sb.innerHTML = '';
+  players.forEach((p, i) => {
+    const tr = document.createElement('tr');
+    if (i === currentPlayer && phase !== 'roundover') tr.classList.add('cur');
+    const dm = p.isDealer ? ' ◆' : '';
+    const bidHtml = p.bid !== null
+      ? `<span class="bid-chip bid-set">${p.bid}</span>`
+      : `<span class="bid-chip bid-wait">—</span>`;
+    const wonHtml = (phase === 'playing' || phase === 'roundover')
+      ? `<span class="won-num">${p.won}</span>` : `<span class="won-num">—</span>`;
+    tr.innerHTML = `<td>${av(p.name,i,22)} ${escHtml(p.name)}${dm}${i===myIndex?' <span style="font-size:10px;color:var(--purple-dk);font-weight:600;">(you)</span>':''}</td><td class="tc">${bidHtml}</td><td class="tc">${wonHtml}</td><td class="tr">${p.score}</td>`;
+    sb.appendChild(tr);
+  });
+
+  // Status
+  const totalBids = bids ? bids.filter(b => b !== null).reduce((a, b) => a + b, 0) : 0;
+  const sr = document.getElementById('statusRow');
+  if (phase === 'bidding') sr.innerHTML = `Bidding — total so far: <strong>${totalBids}</strong> / ${cardsThisRound} tricks`;
+  else if (phase === 'playing') sr.innerHTML = `<strong>${players[currentPlayer]?.name}</strong>'s turn to play`;
+  else sr.innerHTML = '';
+
+  const bidPanel = document.getElementById('bidPanel');
+  const waitPanel = document.getElementById('waitPanel');
+  const handZone = document.getElementById('handZone');
+  const rsumPanel = document.getElementById('rsumPanel');
+  bidPanel.style.display = 'none';
+  waitPanel.style.display = 'none';
+  handZone.style.display = 'none';
+  rsumPanel.style.display = 'none';
+
+  if (phase === 'roundover' && roundResults) {
+    rsumPanel.style.display = 'block';
+    document.getElementById('rsNum').textContent = roundIdx + 1;
+    const rr = document.getElementById('rsRows'); rr.innerHTML = '';
+    roundResults.forEach((r, i) => {
+      const div = document.createElement('div'); div.className = 'rsum-row';
+      div.innerHTML = `<span>${av(r.name,i,20)} <span style="margin-left:4px;">${escHtml(r.name)}</span></span><span>bid ${r.bid}, won ${r.won}</span><span class="pts-chip ${r.hit?'pts-good':'pts-bad'}">${r.hit?'+'+r.pts:'0 pts'}</span>`;
+      rr.appendChild(div);
+    });
+    const nrBtn = document.getElementById('nextRoundBtn');
+    const nrHint = document.getElementById('nextRoundHint');
+    if (isHost) {
+      nrBtn.style.display = 'inline-block'; nrHint.style.display = 'none';
+      nrBtn.onclick = () => socket.emit('nextRound', {roomId: myRoomId});
+    } else {
+      nrBtn.style.display = 'none'; nrHint.style.display = 'inline';
+      nrHint.textContent = 'Waiting for host to continue...';
+    }
+    handZone.style.display = 'block';
+    document.getElementById('handLbl').textContent = 'Your hand';
+    renderHand(myHand, trump, false, null, led);
+    return;
+  }
+
+  if (phase === 'bidding') {
+    if (currentPlayer === myIndex) {
+      bidPanel.style.display = 'block';
+      const isDealer = players[myIndex].isDealer;
+      const soFar = bids.filter(b => b !== null).reduce((a, b) => a + b, 0);
+      const forb = isDealer ? cardsThisRound - soFar : -1;
+      document.getElementById('bidHint').textContent = isDealer
+        ? `You're the dealer — you cannot bid ${forb >= 0 ? forb : '—'}.`
+        : `How many tricks will you win? (0–${cardsThisRound})`;
+      const bb = document.getElementById('bidBtns'); bb.innerHTML = '';
+      for (let b = 0; b <= cardsThisRound; b++) {
+        const btn = document.createElement('button');
+        btn.className = 'bid-btn' + (b === forb ? ' forb' : '');
+        btn.textContent = b;
+        if (b !== forb) btn.onclick = (bv => () => socket.emit('bid', {roomId: myRoomId, playerIdx: myIndex, bid: bv}))(b);
+        bb.appendChild(btn);
+      }
+      handZone.style.display = 'block';
+      document.getElementById('handLbl').textContent = 'Your hand';
+      renderHand(myHand, trump, false, null, led);
+    } else {
+      waitPanel.style.display = 'flex';
+      document.getElementById('waitMsg').textContent = `Waiting for ${players[currentPlayer]?.name} to bid...`;
+      handZone.style.display = 'block';
+      document.getElementById('handLbl').textContent = 'Your hand';
+      renderHand(myHand, trump, false, null, led);
+    }
+  } else if (phase === 'playing') {
+    if (currentPlayer === myIndex) {
+      handZone.style.display = 'block';
+      document.getElementById('handLbl').textContent = 'Your turn — tap a card to play';
+      renderHand(myHand, trump, true, led, led);
+    } else {
+      waitPanel.style.display = 'flex';
+      document.getElementById('waitMsg').textContent = `Waiting for ${players[currentPlayer]?.name} to play...`;
+      handZone.style.display = 'block';
+      document.getElementById('handLbl').textContent = 'Your hand';
+      renderHand(myHand, trump, false, null, led);
+    }
+  }
+
+  // Played cards on table
+  const pc = document.getElementById('playedCards'); pc.innerHTML = '';
+  if (trickPlayed && trickPlayed.length > 0) {
+    for (const {playerIdx, card} of trickPlayed) {
+      const slot = document.createElement('div'); slot.className = 'pslot';
+      slot.innerHTML = `<div class="pslot-name">${escHtml(players[playerIdx]?.name || '')}</div>${cardHTML(card, trump, false, false)}`;
+      pc.appendChild(slot);
+    }
+  } else if (phase === 'playing') {
+    pc.innerHTML = '<span style="font-size:12px;color:var(--teal-dk);opacity:.7;">Waiting for first card...</span>';
+  }
+}
+
+function renderHand(hand, trump, canPlay, led, currentLed) {
+  if (!hand) return;
+  const sorted = [...hand].sort((a, b) => {
+    const order = [trump, '♠', '♥', '♦', '♣'].filter((v, i, ar) => ar.indexOf(v) === i);
+    const sa = order.indexOf(a.s), sb = order.indexOf(b.s);
+    return sa !== sb ? sa - sb : RV[a.r] - RV[b.r];
+  });
+  const hd = document.getElementById('handDiv'); hd.innerHTML = '';
+  for (const c of sorted) {
+    const hasSuit = led ? hand.some(x => x.s === led) : false;
+    const playable = canPlay && (!led || !hasSuit || c.s === led);
+    const dim = canPlay && !playable;
+    const el = document.createElement('div');
+    el.innerHTML = cardHTML(c, trump, dim, playable);
+    if (playable) {
+      el.firstChild.onclick = () => socket.emit('playCard', {roomId: myRoomId, playerIdx: myIndex, card: c});
+    }
+    hd.appendChild(el.firstChild);
+  }
+}
+
+function cardHTML(c, trump, dim, playable) {
+  const col = (c.s === '♥' || c.s === '♦') ? 'red' : 'blk';
+  const tr = c.s === trump ? ' trump-c' : '';
+  const di = dim ? ' dim' : '';
+  const pl = playable ? ' playable' : '';
+  return `<div class="card ${col}${tr}${di}${pl}"><div class="rk">${c.r}</div><div class="su">${c.s}</div></div>`;
+}
+
+function renderGameover(state) {
+  const sorted = [...state.players].sort((a, b) => b.score - a.score);
+  document.getElementById('goSub').textContent = `${sorted[0].name} wins with ${sorted[0].score} points!`;
+  const fl = document.getElementById('finalList'); fl.innerHTML = '';
+  sorted.forEach((p, i) => {
+    const rkClass = ['rk1','rk2','rkn'][i] || 'rkn';
+    const div = document.createElement('div'); div.className = 'f-row' + (i===0?' first':'');
+    div.innerHTML = `<div style="display:flex;align-items:center;"><div class="rank-badge ${rkClass}">${i+1}</div>${av(p.name,state.players.indexOf(p))}<span style="margin-left:8px;">${escHtml(p.name)}</span></div><span>${p.score} pts</span>`;
+    fl.appendChild(div);
+  });
+  document.getElementById('playAgainBtn').onclick = () => {
+    sessionStorage.removeItem('jdg_session');
+    location.href = '/';
+  };
+}
+
+// ── CHAT ──────────────────────────────────────────────────────────────────────
+function sendChat() {
+  const inp = document.getElementById('chatInput');
+  const text = inp.value.trim();
+  if (!text || !myRoomId) return;
+  socket.emit('chat', {roomId: myRoomId, name: myName, text});
+  inp.value = '';
+}
+document.getElementById('chatSend').onclick = sendChat;
+document.getElementById('chatInput').onkeydown = e => { if (e.key === 'Enter') sendChat(); };
+</script>
+</body>
+</html>
