@@ -352,7 +352,7 @@ function av(name,idx,size=32){
 }
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
-let myIdx = null;
+let myIndex = null;
 let myRoomId = null;
 let isHost = false;
 let myName = '';
@@ -373,12 +373,12 @@ socket.on('connect', () => {
 });
 
 socket.on('roomCreated', ({roomId, playerIdx}) => {
-  myRoomId = roomId; myIdx = playerIdx; isHost = true;
+  myRoomId = roomId; myIndex = playerIdx; isHost = true;
   sessionStorage.setItem('jdg_session', JSON.stringify({roomId, playerIdx}));
 });
 
 socket.on('roomJoined', ({roomId, playerIdx}) => {
-  myRoomId = roomId; myIdx = playerIdx; isHost = false;
+  myRoomId = roomId; myIndex = playerIdx; isHost = false;
   sessionStorage.setItem('jdg_session', JSON.stringify({roomId, playerIdx}));
 });
 
@@ -389,6 +389,7 @@ socket.on('lobby', (data) => {
 
 socket.on('state', (state) => {
   currentState = state;
+  myIndex = state.myIndex;
   if (state.phase === 'gameover') { renderGameover(state); showScreen('gameover'); }
   else if (state.phase === 'roundover') { showScreen('game'); renderGame(state); }
   else { showScreen('game'); renderGame(state); }
