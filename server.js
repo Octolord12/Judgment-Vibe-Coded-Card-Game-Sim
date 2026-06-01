@@ -8,8 +8,8 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
-app.use(express.static(path.join(__dirname, 'public')));
-app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+app.use(express.static(__dirname));
+app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
 // ── GAME STATE STORE ──────────────────────────────────────────────────────────
 const rooms = {};
@@ -124,6 +124,7 @@ function buildClientState(roomId, playerIdx) {
     })),
     myIndex: playerIdx,
     myHand: g.hands[playerIdx] || [],
+    bids: g.bids,
     trickPlayed: g.trickPlayed,
     led: g.led,
     currentPlayer: g.currentPlayer,
