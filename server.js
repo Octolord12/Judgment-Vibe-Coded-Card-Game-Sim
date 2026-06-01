@@ -8,8 +8,9 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
-app.use(express.static(__dirname));
-app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+const ROOT = process.cwd();
+app.use(express.static(ROOT));
+app.get('*', (req, res) => res.sendFile(path.join(ROOT, 'index.html')));
 
 // ── GAME STATE STORE ──────────────────────────────────────────────────────────
 const rooms = {};
