@@ -8,8 +8,9 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
-const ROOT = process.cwd();
+const ROOT = path.join(process.cwd(), 'public');
 app.use(express.static(ROOT));
+
 const fs = require('fs');
 app.get('/debug', (req, res) => {
   const files = fs.readdirSync(process.cwd());
